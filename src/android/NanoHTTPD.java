@@ -1003,95 +1003,97 @@ public class NanoHTTPD
 					}
 				}
 			}
-		}
 
-		try
-		{
-			if ( res == null )
+			try
 			{
-				// Get MIME type from file name extension, if possible
-				String mime = null;
-				int dot = f.getCanonicalPath().lastIndexOf( '.' );
-				if ( dot >= 0 )
-					mime = (String)theMimeTypes.get( f.getCanonicalPath().substring( dot + 1 ).toLowerCase());
-				if ( mime == null )
-					mime = MIME_DEFAULT_BINARY;
-
-				// Calculate etag
-				String etag = Integer.toHexString((f.getAbsolutePath() + f.lastModified() + "" + f.length()).hashCode());
-
-				//System.out.println( String.format("mime: %s, etag: %s", mime, etag));
-
-				// Support (simple) skipping:
-				long startFrom = 0;
-				long endAt = -1;
-				String range = header.getProperty( "range" );
-				if ( range != null )
+				if ( res == null )
 				{
-					if ( range.startsWith( "bytes=" ))
+					// Get MIME type from file name extension, if possible
+					String mime = null;
+					int dot = f.getCanonicalPath().lastIndexOf( '.' );
+					if ( dot >= 0 )
+						mime = (String)theMimeTypes.get( f.getCanonicalPath().substring( dot + 1 ).toLowerCase());
+					if ( mime == null )
+						mime = MIME_DEFAULT_BINARY;
+
+					// Calculate etag
+					String etag = Integer.toHexString((f.getAbsolutePath() + f.lastModified() + "" + f.length()).hashCode());
+
+					//System.out.println( String.format("mime: %s, etag: %s", mime, etag));
+
+					// Support (simple) skipping:
+					long startFrom = 0;
+					long endAt = -1;
+					String range = header.getProperty( "range" );
+					if ( range != null )
 					{
-						range = range.substring( "bytes=".length());
-						int minus = range.indexOf( '-' );
-						try {
-							if ( minus > 0 )
-							{
-								startFrom = Long.parseLong( range.substring( 0, minus ));
-								endAt = Long.parseLong( range.substring( minus+1 ));
+						if ( range.startsWith( "bytes=" ))
+						{
+							range = range.substring( "bytes=".length());
+							int minus = range.indexOf( '-' );
+							try {
+								if ( minus > 0 )
+								{
+									startFrom = Long.parseLong( range.substring( 0, minus ));
+									endAt = Long.parseLong( range.substring( minus+1 ));
+								}
 							}
+							catch ( NumberFormatException nfe ) {}
 						}
-						catch ( NumberFormatException nfe ) {}
 					}
-				}
 
-				// Change return code and add Content-Range header when skipping is requested
-				long fileLen = f.length();
-				//System.out.println( String.format("file length: %d", fileLen));
+					// Change return code and add Content-Range header when skipping is requested
+					long fileLen = f.length();
+					//System.out.println( String.format("file length: %d", fileLen));
 
-				if (range != null && startFrom >= 0)
-				{
-					if ( startFrom >= fileLen)
+					if (range != null && startFrom >= 0)
 					{
-						res = new Response( HTTP_RANGE_NOT_SATISFIABLE, MIME_PLAINTEXT, "" );
-						res.addHeader( "Content-Range", "bytes 0-0/" + fileLen);
-						res.addHeader( "ETag", etag);
+						if ( startFrom >= fileLen)
+						{
+							res = new Response( HTTP_RANGE_NOT_SATISFIABLE, MIME_PLAINTEXT, "" );
+							res.addHeader( "Content-Range", "bytes 0-0/" + fileLen);
+							res.addHeader( "ETag", etag);
+						}
+						else
+						{
+							if ( endAt < 0 )
+								endAt = fileLen-1;
+							long newLen = endAt - startFrom + 1;
+							if ( newLen < 0 ) newLen = 0;
+
+							final long dataLen = newLen;
+							//InputStream fis = new FileInputStream( f ) {
+							//	public int available() throws IOException { return (int)dataLen; }
+							//};
+							InputStream fis = f.getInputStream();
+							fis.skip( startFrom );
+
+							res = new Response( HTTP_PARTIALCONTENT, mime, fis );
+							res.addHeader( "Content-Length", "" + dataLen);
+							res.addHeader( "Content-Range", "bytes " + startFrom + "-" + endAt + "/" + fileLen);
+							res.addHeader( "ETag", etag);
+						}
 					}
 					else
 					{
-						if ( endAt < 0 )
-							endAt = fileLen-1;
-						long newLen = endAt - startFrom + 1;
-						if ( newLen < 0 ) newLen = 0;
-
-						final long dataLen = newLen;
-						//InputStream fis = new FileInputStream( f ) {
-						//	public int available() throws IOException { return (int)dataLen; }
-						//};
-						InputStream fis = f.getInputStream();
-						fis.skip( startFrom );
-
-						res = new Response( HTTP_PARTIALCONTENT, mime, fis );
-						res.addHeader( "Content-Length", "" + dataLen);
-						res.addHeader( "Content-Range", "bytes " + startFrom + "-" + endAt + "/" + fileLen);
-						res.addHeader( "ETag", etag);
-					}
-				}
-				else
-				{
-					if (etag.equals(header.getProperty("if-none-match")))
-						res = new Response( HTTP_NOTMODIFIED, mime, "");
-					else
-					{
-						//res = new Response( HTTP_OK, mime, new FileInputStream( f ));
-						res = new Response( HTTP_OK, mime, f.getInputStream());
-						res.addHeader( "Content-Length", "" + fileLen);
-						res.addHeader( "ETag", etag);
+						if (etag.equals(header.getProperty("if-none-match")))
+							res = new Response( HTTP_NOTMODIFIED, mime, "");
+						else
+						{
+							//res = new Response( HTTP_OK, mime, new FileInputStream( f ));
+							res = new Response( HTTP_OK, mime, f.getInputStream());
+							res.addHeader( "Content-Length", "" + fileLen);
+							res.addHeader( "ETag", etag);
+						}
 					}
 				}
 			}
-		}
-		catch( IOException ioe )
-		{
-			res = new Response( HTTP_FORBIDDEN, MIME_PLAINTEXT, "FORBIDDEN: Reading file failed." );
+			catch( IOException ioe )
+			{
+				res = new Response( HTTP_FORBIDDEN, MIME_PLAINTEXT, "FORBIDDEN: Reading file failed." );
+			}
+		} else {
+			res = new Response( HTTP_FORBIDDEN, MIME_PLAINTEXT, "ERROR: Null URI." );
 		}
 
 		res.addHeader( "Accept-Ranges", "bytes"); // Announce that the file server accepts partial content requestes
