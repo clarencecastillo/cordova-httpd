@@ -906,99 +906,101 @@ public class NanoHTTPD
 			res = new Response( HTTP_INTERNALERROR, MIME_PLAINTEXT,
 					"INTERNAL ERRROR: serveFile(): given homeDir is not a directory." );
 
-		if ( uri != null && res == null )
-		{
-			// Remove URL arguments
-			uri = uri.trim().replace( File.separatorChar, '/' );
-			if ( uri.indexOf( '?' ) >= 0 )
-				uri = uri.substring(0, uri.indexOf( '?' ));
-
-			// Prohibit getting out of current directory
-			if ( uri.startsWith( ".." ) || uri.endsWith( ".." ) || uri.indexOf( "../" ) >= 0 )
-				res = new Response( HTTP_FORBIDDEN, MIME_PLAINTEXT,
-						"FORBIDDEN: Won't serve ../ for security reasons." );
-		}
-
-		AndroidFile f = new AndroidFile( homeDir, uri );
-		if ( res == null && !f.exists())
-			res = new Response( HTTP_NOTFOUND, MIME_PLAINTEXT,
-					"Error 404, file not found." );
-
-		// List the directory, if necessary
-		if ( uri != null && res == null && f.isDirectory())
-		{
-			// Browsers get confused without '/' after the
-			// directory, send a redirect.
-			if ( !uri.endsWith( "/" ))
-			{
-				uri += "/";
-				res = new Response( HTTP_REDIRECT, MIME_HTML,
-						"<html><body>Redirected: <a href=\"" + uri + "\">" +
-								uri + "</a></body></html>");
-				res.addHeader( "Location", uri );
-			}
-
+		if ( uri != null ) {
 			if ( res == null )
 			{
-				// First try index.html and index.htm
-				if ( new AndroidFile( f, "index.html" ).exists())
-					f = new AndroidFile( homeDir, uri + "/index.html" );
-				else if ( new AndroidFile( f, "index.htm" ).exists())
-					f = new AndroidFile( homeDir, uri + "/index.htm" );
-				// No index file, list the directory if it is readable
-				else if ( allowDirectoryListing && f.canRead() )
-				{
-					String[] files = f.list();
-					String msg = "<html><body><h1>Directory " + uri + "</h1><br/>";
+				// Remove URL arguments
+				uri = uri.trim().replace( File.separatorChar, '/' );
+				if ( uri.indexOf( '?' ) >= 0 )
+					uri = uri.substring(0, uri.indexOf( '?' ));
 
-					if ( uri.length() > 1 )
-					{
-						String u = uri.substring( 0, uri.length()-1 );
-						int slash = u.lastIndexOf( '/' );
-						if ( slash >= 0 && slash  < u.length())
-							msg += "<b><a href=\"" + uri.substring(0, slash+1) + "\">..</a></b><br/>";
-					}
-
-					if (files!=null)
-					{
-						for ( int i=0; i<files.length; ++i )
-						{
-							AndroidFile curFile = new AndroidFile( f, files[i] );
-							boolean dir = curFile.isDirectory();
-							if ( dir )
-							{
-								msg += "<b>";
-								files[i] += "/";
-							}
-
-							msg += "<a href=\"" + encodeUri( uri + files[i] ) + "\">" +
-									files[i] + "</a>";
-
-							// Show file size
-							if ( curFile.isFile())
-							{
-								long len = curFile.length();
-								msg += " &nbsp;<font size=2>(";
-								if ( len < 1024 )
-									msg += len + " bytes";
-								else if ( len < 1024 * 1024 )
-									msg += len/1024 + "." + (len%1024/10%100) + " KB";
-								else
-									msg += len/(1024*1024) + "." + len%(1024*1024)/10%100 + " MB";
-
-								msg += ")</font>";
-							}
-							msg += "<br/>";
-							if ( dir ) msg += "</b>";
-						}
-					}
-					msg += "</body></html>";
-					res = new Response( HTTP_OK, MIME_HTML, msg );
-				}
-				else
-				{
+				// Prohibit getting out of current directory
+				if ( uri.startsWith( ".." ) || uri.endsWith( ".." ) || uri.indexOf( "../" ) >= 0 )
 					res = new Response( HTTP_FORBIDDEN, MIME_PLAINTEXT,
-							"FORBIDDEN: No directory listing." );
+							"FORBIDDEN: Won't serve ../ for security reasons." );
+			}
+
+			AndroidFile f = new AndroidFile( homeDir, uri );
+			if ( res == null && !f.exists())
+				res = new Response( HTTP_NOTFOUND, MIME_PLAINTEXT,
+						"Error 404, file not found." );
+
+			// List the directory, if necessary
+			if ( res == null && f.isDirectory())
+			{
+				// Browsers get confused without '/' after the
+				// directory, send a redirect.
+				if ( !uri.endsWith( "/" ))
+				{
+					uri += "/";
+					res = new Response( HTTP_REDIRECT, MIME_HTML,
+							"<html><body>Redirected: <a href=\"" + uri + "\">" +
+									uri + "</a></body></html>");
+					res.addHeader( "Location", uri );
+				}
+
+				if ( res == null )
+				{
+					// First try index.html and index.htm
+					if ( new AndroidFile( f, "index.html" ).exists())
+						f = new AndroidFile( homeDir, uri + "/index.html" );
+					else if ( new AndroidFile( f, "index.htm" ).exists())
+						f = new AndroidFile( homeDir, uri + "/index.htm" );
+					// No index file, list the directory if it is readable
+					else if ( allowDirectoryListing && f.canRead() )
+					{
+						String[] files = f.list();
+						String msg = "<html><body><h1>Directory " + uri + "</h1><br/>";
+
+						if ( uri.length() > 1 )
+						{
+							String u = uri.substring( 0, uri.length()-1 );
+							int slash = u.lastIndexOf( '/' );
+							if ( slash >= 0 && slash  < u.length())
+								msg += "<b><a href=\"" + uri.substring(0, slash+1) + "\">..</a></b><br/>";
+						}
+
+						if (files!=null)
+						{
+							for ( int i=0; i<files.length; ++i )
+							{
+								AndroidFile curFile = new AndroidFile( f, files[i] );
+								boolean dir = curFile.isDirectory();
+								if ( dir )
+								{
+									msg += "<b>";
+									files[i] += "/";
+								}
+
+								msg += "<a href=\"" + encodeUri( uri + files[i] ) + "\">" +
+										files[i] + "</a>";
+
+								// Show file size
+								if ( curFile.isFile())
+								{
+									long len = curFile.length();
+									msg += " &nbsp;<font size=2>(";
+									if ( len < 1024 )
+										msg += len + " bytes";
+									else if ( len < 1024 * 1024 )
+										msg += len/1024 + "." + (len%1024/10%100) + " KB";
+									else
+										msg += len/(1024*1024) + "." + len%(1024*1024)/10%100 + " MB";
+
+									msg += ")</font>";
+								}
+								msg += "<br/>";
+								if ( dir ) msg += "</b>";
+							}
+						}
+						msg += "</body></html>";
+						res = new Response( HTTP_OK, MIME_HTML, msg );
+					}
+					else
+					{
+						res = new Response( HTTP_FORBIDDEN, MIME_PLAINTEXT,
+								"FORBIDDEN: No directory listing." );
+					}
 				}
 			}
 		}
